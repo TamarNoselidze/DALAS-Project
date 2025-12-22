@@ -4,21 +4,39 @@ import pandas as pd
 import geopandas as gpd
 import regionmask
 
-
 COUNTRY_CODES = [
-    "AUT", "BIH", "BEL", "BGR", "CHE", "CZE", "DEU", "DNK", "EST", "ESP", "FIN", "FRA", "GBR", 
-    "GEO", "GRC", "HRV", "HUN", "IRL", "ISL", "ITA", "LTU", "LUX", "LVA", "MDA", "MNE", "MKD", 
-    "NLD", "NOR", "POL", "PRT", "ROU", "SRB", "SWE", "SVN", "SVK", "TUR", "UKR"
-    # "ALB", "CYP",
+    'AFG', 'AGO', 'ALB', 'AND', 'ARE', 'ARG', 'ARM', 'ASM', 'ATG', 'AUS', 'AUT', 'AZE', 
+    'BDI', 'BEL', 'BEN', 'BFA', 'BGD', 'BGR', 'BHR', 'BHS', 'BIH', 'BLR', 'BLZ', 'BMU', 
+    'BOL', 'BRA', 'BRN', 'BTN', 'BWA', 'CAF', 'CAN', 'CHE', 'CHL', 'CHN', 'CIV', 
+    'CMR', 'COD', 'COG', 'COL', 'COM', 'CPV', 'CRI', 'CUB', 'CYP', 'CZE', 'DEU', 
+    'DJI', 'DNK', 'DOM', 'DZA', 'ECU', 'EGY', 'ERI', 'ESP', 'EST', 'ETH', 'FIN', 
+    'FJI', 'FRA', 'GAB', 'GBR', 'GEO', 'GHA', 'GIN', 'GMB', 'GNB', 'GNQ', 'GRC', 
+    'GRL', 'GTM', 'GUM', 'GUY', 'HND', 'HRV', 'HTI', 'HUN', 'IDN', 'IND', 'IRL', 
+    'IRN', 'IRQ', 'ISL', 'ISR', 'ITA', 'JAM', 'JOR', 'JPN', 'KAZ', 'KEN', 'KGZ', 'KHM', 
+    'KIR', 'KNA', 'KOR', 'KWT', 'LAO', 'LBN', 'LBR', 'LBY', 'LCA', 'LKA', 'LSO', 'LTU', 
+    'LUX', 'LVA', 'MAR', 'MDA', 'MDG', 'MEX', 'MKD', 'MLI',  
+    'MMR', 'MNE', 'MNG', 'MOZ', 'MRT', 'MUS', 'MWI', 'MYS', 'NAM', 'NER', 'NGA', 
+    'NIC', 'NLD', 'NOR', 'NPL', 'NZL', 'OMN', 'PAK', 'PAN', 'PER', 'PHL', 
+    'PNG', 'POL', 'PRI', 'PRK', 'PRT', 'PRY', 'PSX', 'QAT', 'ROU', 'RUS', 'RWA', 
+    'SAU', 'SDN', 'SEN', 'SGP', 'SLB', 'SLE', 'SLV', 'SMR', 'SOM', 'SRB', 'STP', 
+    'SUR', 'SVK', 'SVN', 'SWE', 'SWZ', 'SYC', 'SYR', 'TCD', 'TGO', 'THA', 'TJK',  
+    'TKM', 'TLS', 'TON', 'TTO', 'TUN', 'TUR', 'TWN', 'TZA', 'UGA', 'UKR', 'URY', 
+    'USA', 'UZB', 'VCT', 'VEN', 'VIR', 'VNM', 'VUT', 'WSM', 'YEM', 'ZAF', 'ZMB', 'ZWE'
 ]
 ISO_COLUMN = "ADM0_A3"
 
 
 # 1. LOAD DATA
-def load_dataset(ds) -> xr.Dataset:
+def load_dataset(ds, fine_resolution=0.25) -> xr.Dataset:
     print(f"Loading dataset")
     print("  Dimensions:", dict(ds.dims))
     print("  Variables:", list(ds.data_vars))
+
+    # print(f"Interpolating to {fine_resolution} degree grid...")
+    # new_lat = np.arange(ds.latitude.min(), ds.latitude.max() + fine_resolution, fine_resolution)
+    # new_lon = np.arange(ds.longitude.min(), ds.longitude.max() + fine_resolution, fine_resolution)
+    
+    # ds = ds.interp(latitude=new_lat, longitude=new_lon, method="linear")
 
     # Ensure we have a 'time' coordinate and it's datetime64
     if "time" in ds.coords and not np.issubdtype(ds["time"].dtype, np.datetime64):
@@ -39,6 +57,8 @@ def load_dataset(ds) -> xr.Dataset:
 
     print("Lat min/max:", float(ds.latitude.min()), float(ds.latitude.max()))
 
+
+
     return ds
 
 
@@ -47,29 +67,30 @@ def load_dataset(ds) -> xr.Dataset:
 def load_countries():
     print("Loading Natural Earth country boundaries...")
 
-    url = "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip"
+    # url = "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip"
+    url = "https://naciscdn.org/naturalearth/50m/cultural/ne_50m_admin_0_countries.zip"
     world = gpd.read_file(url)
 
     iso_col = ISO_COLUMN
     name_col = "NAME" if "NAME" in world.columns else "ADMIN"
 
-    europe = world[world[iso_col].isin(COUNTRY_CODES)].copy()
-    europe = europe.to_crs("EPSG:4326")
+    world = world[world[iso_col].isin(COUNTRY_CODES)].copy()
+    world = world.to_crs("EPSG:4326")
 
     # Rename
-    europe = europe.rename(columns={iso_col: "ADM0_A3", name_col: "NAME"})
+    world = world.rename(columns={iso_col: "ADM0_A3", name_col: "NAME"})
 
     # Reset index so region numbers are 0..N-1
-    europe = europe.reset_index(drop=True)
+    world = world.reset_index(drop=True)
 
-    found = sorted(europe["ADM0_A3"].unique())
+    found = sorted(world["ADM0_A3"].unique())
     missing = sorted(set(COUNTRY_CODES) - set(found))
 
     print(f"  Found {len(found)} countries: {found}")
     if missing:
         print(f"  WARNING: These codes not found in Natural Earth: {missing}")
 
-    return europe
+    return world
 
 
 # 3. BUILD REGION MASK & AREA WEIGHTS
@@ -122,7 +143,8 @@ def aggregate_to_countries(ds, regions, mask, weights):
         # Boolean mask for this region
         region_mask = (mask == rid)
 
-        if not region_mask.any().item():
+        # if not region_mask.any().item():
+        if not region_mask.any().compute().item():
             print(f"  Region {rid} ({rcode}) has no grid cells, skipping.")
             continue
 
@@ -135,7 +157,8 @@ def aggregate_to_countries(ds, regions, mask, weights):
 
         # Now weights have no NaNs, only 0 outside the country
         ds_mean = ds_r.weighted(w_r_broadcast).mean(dim=("latitude", "longitude"))
-
+        ds_mean = ds_mean.compute()
+        
         ds_mean = ds_mean.assign_coords(
             country_code=rcode,
             country_name=rname,
@@ -163,7 +186,7 @@ def to_tidy_dataframe(ds_country: xr.Dataset, cams=False) -> pd.DataFrame:
 
     # Move all coords into DataFrame
     df = ds_country.to_dataframe().reset_index()
-
+    df = df[df["country_code"].isin(COUNTRY_CODES)].copy()
     if "time" not in df.columns:
         if cams:
             df = df.rename(columns={'valid_time' : 'time'})
@@ -194,13 +217,14 @@ def to_tidy_dataframe(ds_country: xr.Dataset, cams=False) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    path = './CAMS_data/data_allhours_sfc.nc'
-    # path = './ERA_data/ERA5_merged.nc'
+    # path = './axali_cams/data_allhours_sfc.nc'
+    path = './till2011/ERA5_merged_11.nc'
 
-    output_csv = "CAMS_aggregated.csv"
-    # output_csv = "ERA5_aggregated.csv"
+    # output_csv = "CAMS_aggregated_axali.csv"
+    output_csv = "ERA5_aggregated_plstn.csv"
 
-    raw_dataset = xr.open_dataset(path)
+    # raw_dataset = xr.open_dataset(path)
+    raw_dataset = xr.open_dataset(path, chunks={'time': 400})
 
     ds = load_dataset(raw_dataset)
 
